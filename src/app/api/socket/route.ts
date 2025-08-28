@@ -5,6 +5,7 @@ import { sessionStorage } from '@/lib/session-storage';
 import { createSessionId, createParticipantId } from '@/lib/session-utils';
 import { ClientToServerEvents, ServerToClientEvents } from '@/lib/socket-events';
 import { Session, Participant, Round } from '@/types/session';
+import { calculateStatistics } from '@/lib/vote-statistics';
 
 export const runtime = 'nodejs';
 
@@ -75,6 +76,51 @@ export async function GET(req: NextRequest) {
           socket.join(`session:${sessionId}`);
           callback({ session: updatedSession, participantId });
           socket.to(`session:${sessionId}`).emit('participant:joined', { participant });
+        }
+      });
+
+      socket.on('vote:cast', ({ sessionId, participantId, value }, callback) => {
+        const session = sessionStorage.getSession(sessionId);
+        if (!session) {
+          callback({ ok: false });
+          return;
+        }
+
+        if (session.currentRound.revealedAt) {
+          callback({ ok: false });
+          return;
+        }
+
+        const updatedSession = sessionStorage.castVote(sessionId, participantId, value);
+        if (updatedSession) {
+          callback({ ok: true });
+          socket.to(`session:${sessionId}`).emit('vote:updated', { participantId });
+          socket.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
+        } else {
+          callback({ ok: false });
+        }
+      });
+
+      socket.on('round:reveal', ({ sessionId }, callback) => {
+        const updatedSession = sessionStorage.revealRound(sessionId);
+        if (updatedSession) {
+          callback({ ok: true });
+          const stats = calculateStatistics(updatedSession.currentRound.votes);
+          io.to(`session:${sessionId}`).emit('round:revealed', { stats, round: updatedSession.currentRound });
+          io.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
+        } else {
+          callback({ ok: false });
+        }
+      });
+
+      socket.on('round:reset', ({ sessionId }, callback) => {
+        const updatedSession = sessionStorage.resetRound(sessionId);
+        if (updatedSession) {
+          callback({ ok: true });
+          io.to(`session:${sessionId}`).emit('round:reset', { round: updatedSession.currentRound });
+          io.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
+        } else {
+          callback({ ok: false });
         }
       });
 
