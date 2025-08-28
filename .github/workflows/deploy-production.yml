@@ -28,6 +28,7 @@ jobs:
       run: npm run build
       
     - name: Deploy to Vercel Production
+      if: ${{ secrets.VERCEL_TOKEN != '' }}
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -36,3 +37,12 @@ jobs:
         vercel-args: '--prod'
         working-directory: ./
         scope: ${{ secrets.VERCEL_ORG_ID }}
+        
+    - name: Deployment Status
+      run: |
+        if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+          echo "⚠️ Vercel deployment skipped - GitHub secrets not configured"
+          echo "ℹ️ Vercel native deployment may still work if repository is connected"
+        else
+          echo "✅ Vercel deployment completed via GitHub Actions"
+        fi
