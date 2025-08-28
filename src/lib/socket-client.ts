@@ -14,8 +14,14 @@ export function useSocket(sessionId?: string) {
   useEffect(() => {
     if (!sessionId) return;
 
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
-      transports: ['websocket', 'polling']
+    const isProduction = process.env.NODE_ENV === 'production';
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 
+      (isProduction && typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+    
+    const socketInstance = io(socketUrl, {
+      transports: isProduction ? ['polling'] : ['websocket', 'polling'],
+      path: isProduction ? '/api/socket/socket.io' : '/socket.io/',
+      forceNew: true
     });
 
     socketInstance.on('connect', () => {

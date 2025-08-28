@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Server as SocketIOServer } from 'socket.io';
+import { createServer } from 'http';
 import { sessionStorage } from '@/lib/session-storage';
 import { createSessionId, createParticipantId } from '@/lib/session-utils';
 import { ClientToServerEvents, ServerToClientEvents } from '@/lib/socket-events';
@@ -8,32 +9,51 @@ import { calculateStatistics } from '@/lib/vote-statistics';
 
 export const runtime = 'nodejs';
 
-let io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
+declare global {
+  var io: SocketIOServer<ClientToServerEvents, ServerToClientEvents> | undefined;
+  var httpServer: any;
+}
 
 export async function GET(req: NextRequest) {
-  if (!io) {
+  if (!global.io) {
     console.log('Initializing Socket.IO server...');
     
-    if (!(global as any).httpServer) {
-      const { createServer } = await import('http');
-      (global as any).httpServer = createServer();
+    if (process.env.NODE_ENV === 'production') {
+      global.io = new SocketIOServer({
+        cors: {
+          origin: true,
+          methods: ['GET', 'POST']
+        },
+        transports: ['polling'],
+        path: '/api/socket/socket.io',
+        allowEIO3: true
+      });
+    } else {
+      if (!global.httpServer) {
+        global.httpServer = createServer();
+        const port = process.env.SOCKET_PORT || 3001;
+        global.httpServer.listen(port, () => {
+          console.log(`Socket.IO server running on port ${port}`);
+        }).on('error', (err: any) => {
+          if (err.code === 'EADDRINUSE') {
+            console.log(`Port ${port} is in use, Socket.IO server already running`);
+          } else {
+            console.error('Socket.IO server error:', err);
+          }
+        });
+      }
       
-      const port = process.env.SOCKET_PORT || 3001;
-      (global as any).httpServer.listen(port, () => {
-        console.log(`Socket.IO server running on port ${port}`);
+      global.io = new SocketIOServer(global.httpServer, {
+        cors: {
+          origin: '*',
+          methods: ['GET', 'POST']
+        },
+        transports: ['websocket', 'polling'],
+        path: '/socket.io/'
       });
     }
-    
-    io = new SocketIOServer((global as any).httpServer, {
-      cors: {
-        origin: process.env.NODE_ENV === 'production' ? false : '*',
-        methods: ['GET', 'POST']
-      },
-      transports: ['websocket', 'polling'],
-      path: '/socket.io/'
-    });
 
-    io.on('connection', (socket) => {
+    global.io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
 
       socket.on('session:create', ({ topic, creatorName }, callback) => {
@@ -121,8 +141,8 @@ export async function GET(req: NextRequest) {
         if (updatedSession) {
           callback({ ok: true });
           const stats = calculateStatistics(updatedSession.currentRound.votes);
-          io.to(`session:${sessionId}`).emit('round:revealed', { stats, round: updatedSession.currentRound });
-          io.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
+          global.io!.to(`session:${sessionId}`).emit('round:revealed', { stats, round: updatedSession.currentRound });
+          global.io!.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
         } else {
           callback({ ok: false });
         }
@@ -132,8 +152,8 @@ export async function GET(req: NextRequest) {
         const updatedSession = sessionStorage.resetRound(sessionId);
         if (updatedSession) {
           callback({ ok: true });
-          io.to(`session:${sessionId}`).emit('round:reset', { round: updatedSession.currentRound });
-          io.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
+          global.io!.to(`session:${sessionId}`).emit('round:reset', { round: updatedSession.currentRound });
+          global.io!.to(`session:${sessionId}`).emit('session:state', { session: updatedSession });
         } else {
           callback({ ok: false });
         }
@@ -158,4 +178,12 @@ export async function GET(req: NextRequest) {
   }
 
   return new Response('Socket.IO server initialized', { status: 200 });
+}
+
+export async function POST(req: NextRequest) {
+  if (!global.io) {
+    await GET(req);
+  }
+  
+  return new Response('Socket.IO polling endpoint', { status: 200 });
 }
