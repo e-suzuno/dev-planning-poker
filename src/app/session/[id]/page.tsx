@@ -1,14 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Session, Participant } from '@/types/session';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Session, Participant, CardValue } from '@/types/session';
+import VotingPanel from '@/components/session/VotingPanel';
+import ParticipantsList from '@/components/session/ParticipantsList';
+import ResultsDisplay from '@/components/session/ResultsDisplay';
 
 export default function SessionPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const sessionId = params.id as string;
+  const joinName = searchParams.get('name');
+  
   const [session, setSession] = useState<Session | null>(null);
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [selectedVote, setSelectedVote] = useState<CardValue | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,6 +29,17 @@ export default function SessionPage() {
         }
         const data = await response.json();
         setSession(data.session);
+        
+        if (joinName && !participantId) {
+          const existingParticipant = data.session.participants.find((p: Participant) => p.name === joinName);
+          if (existingParticipant) {
+            setParticipantId(existingParticipant.id);
+            const currentVote = data.session.currentRound.votes[existingParticipant.id];
+            if (currentVote !== undefined) {
+              setSelectedVote(currentVote);
+            }
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load session');
       } finally {
@@ -31,7 +50,38 @@ export default function SessionPage() {
     if (sessionId) {
       fetchSession();
     }
-  }, [sessionId]);
+  }, [sessionId, joinName, participantId]);
+
+  const handleVoteSelect = async (value: CardValue) => {
+    if (!session || !participantId || session.currentRound.revealedAt) return;
+    
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ participantId, value }),
+      });
+
+      if (response.ok) {
+        setSelectedVote(value);
+        const data = await response.json();
+        setSession(data.session);
+      }
+    } catch (err) {
+      console.error('Failed to cast vote:', err);
+    }
+  };
+
+  const handleReveal = async () => {
+    console.log('Reveal functionality will be implemented with Socket.IO');
+  };
+
+  const handleReset = async () => {
+    console.log('Reset functionality will be implemented with Socket.IO');
+    setSelectedVote(null);
+  };
 
   if (loading) {
     return (
@@ -58,6 +108,8 @@ export default function SessionPage() {
     );
   }
 
+  const isRoundRevealed = !!session.currentRound.revealedAt;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-8">
@@ -67,17 +119,28 @@ export default function SessionPage() {
         <p className="text-gray-600">Session ID: {session.id}</p>
       </div>
 
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white p-6 rounded-lg shadow-md border mb-6">
-          <h2 className="text-xl font-semibold mb-4">Participants ({session.participants.length})</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {session.participants.map((participant: Participant) => (
-              <div key={participant.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
-                <div className={`w-3 h-3 rounded-full ${participant.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                <span className="font-medium">{participant.name}</span>
-              </div>
-            ))}
-          </div>
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <VotingPanel
+            selectedVote={selectedVote}
+            isRoundRevealed={isRoundRevealed}
+            onVoteSelect={handleVoteSelect}
+          />
+          
+          <ResultsDisplay
+            currentRound={session.currentRound}
+            isRevealed={isRoundRevealed}
+            onReveal={handleReveal}
+            onReset={handleReset}
+          />
+        </div>
+        
+        <div>
+          <ParticipantsList
+            participants={session.participants}
+            currentRound={session.currentRound}
+            isRoundRevealed={isRoundRevealed}
+          />
         </div>
       </div>
     </div>

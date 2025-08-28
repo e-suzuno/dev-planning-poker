@@ -1,4 +1,5 @@
-import { Session, Participant } from '@/types/session';
+import { Session, Participant, CardValue, Round } from '@/types/session';
+import { createParticipantId } from '@/lib/session-utils';
 
 class SessionStorage {
   private sessions: Map<string, Session> = new Map();
@@ -64,6 +65,60 @@ class SessionStorage {
     }
 
     return deletedCount;
+  }
+
+  castVote(sessionId: string, participantId: string, value: CardValue): Session | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) return undefined;
+
+    const updatedSession = {
+      ...session,
+      currentRound: {
+        ...session.currentRound,
+        votes: {
+          ...session.currentRound.votes,
+          [participantId]: value
+        }
+      }
+    };
+    
+    this.sessions.set(sessionId, updatedSession);
+    return updatedSession;
+  }
+
+  revealRound(sessionId: string): Session | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) return undefined;
+
+    const updatedSession = {
+      ...session,
+      currentRound: {
+        ...session.currentRound,
+        revealedAt: Date.now()
+      }
+    };
+    
+    this.sessions.set(sessionId, updatedSession);
+    return updatedSession;
+  }
+
+  resetRound(sessionId: string): Session | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) return undefined;
+
+    const newRound: Round = {
+      id: createParticipantId(),
+      votes: {}
+    };
+
+    const updatedSession = {
+      ...session,
+      history: [...session.history, session.currentRound],
+      currentRound: newRound
+    };
+    
+    this.sessions.set(sessionId, updatedSession);
+    return updatedSession;
   }
 }
 
