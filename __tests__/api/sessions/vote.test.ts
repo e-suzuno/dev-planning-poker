@@ -1,18 +1,3 @@
-Object.defineProperty(global, 'Request', {
-  value: class MockRequest {
-    constructor(input: any, init?: any) {
-      return {
-        url: input,
-        method: init?.method || 'GET',
-        headers: new Map(),
-        body: init?.body,
-        json: async () => JSON.parse(init?.body || '{}')
-      } as any;
-    }
-  },
-  writable: true
-});
-
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/sessions/[id]/vote/route';
 import { sessionStorage } from '@/lib/session-storage';
@@ -28,7 +13,7 @@ describe('/api/sessions/[id]/vote', () => {
 
   it('successfully casts a vote', async () => {
     const testSession: Session = {
-      id: 'TEST123',
+      id: '23456789',
       topic: 'Test Session',
       participants: [
         {
@@ -48,7 +33,7 @@ describe('/api/sessions/[id]/vote', () => {
     
     sessionStorage.createSession(testSession);
 
-    const request = new NextRequest(`http://localhost/api/sessions/TEST123/vote`, {
+    const request = new NextRequest(`http://localhost/api/sessions/23456789/vote`, {
       method: 'POST',
       body: JSON.stringify({
         participantId: 'participant-1',
@@ -56,7 +41,7 @@ describe('/api/sessions/[id]/vote', () => {
       })
     });
 
-    const params = Promise.resolve({ id: 'TEST123' });
+    const params = Promise.resolve({ id: '23456789' });
     const response = await POST(request, { params });
     const data = await response.json();
 
@@ -66,7 +51,7 @@ describe('/api/sessions/[id]/vote', () => {
 
   it('handles question mark votes', async () => {
     const testSession: Session = {
-      id: 'TEST456',
+      id: 'TEST4567',
       topic: 'Test Session',
       participants: [
         {
@@ -86,7 +71,7 @@ describe('/api/sessions/[id]/vote', () => {
     
     sessionStorage.createSession(testSession);
 
-    const request = new NextRequest('http://localhost/api/sessions/TEST456/vote', {
+    const request = new NextRequest('http://localhost/api/sessions/TEST4567/vote', {
       method: 'POST',
       body: JSON.stringify({
         participantId: 'participant-1',
@@ -94,7 +79,7 @@ describe('/api/sessions/[id]/vote', () => {
       })
     });
 
-    const params = Promise.resolve({ id: 'TEST456' });
+    const params = Promise.resolve({ id: 'TEST4567' });
     const response = await POST(request, { params });
     const data = await response.json();
 
@@ -120,7 +105,7 @@ describe('/api/sessions/[id]/vote', () => {
   });
 
   it('returns 404 for non-existent session', async () => {
-    const request = new NextRequest('http://localhost/api/sessions/NOTFOUND/vote', {
+    const request = new NextRequest('http://localhost/api/sessions/ABCDEFGH/vote', {
       method: 'POST',
       body: JSON.stringify({
         participantId: 'participant-1',
@@ -128,7 +113,7 @@ describe('/api/sessions/[id]/vote', () => {
       })
     });
 
-    const params = Promise.resolve({ id: 'NOTFOUND' });
+    const params = Promise.resolve({ id: 'ABCDEFGH' });
     const response = await POST(request, { params });
     const data = await response.json();
 
@@ -138,7 +123,7 @@ describe('/api/sessions/[id]/vote', () => {
 
   it('returns 400 for missing participantId', async () => {
     const testSession: Session = {
-      id: 'TEST789',
+      id: 'TEST7892',
       topic: 'Test Session',
       participants: [],
       currentRound: {
@@ -151,14 +136,14 @@ describe('/api/sessions/[id]/vote', () => {
     
     sessionStorage.createSession(testSession);
 
-    const request = new NextRequest('http://localhost/api/sessions/TEST789/vote', {
+    const request = new NextRequest('http://localhost/api/sessions/TEST7892/vote', {
       method: 'POST',
       body: JSON.stringify({
         value: 5
       })
     });
 
-    const params = Promise.resolve({ id: 'TEST789' });
+    const params = Promise.resolve({ id: 'TEST7892' });
     const response = await POST(request, { params });
     const data = await response.json();
 
@@ -168,7 +153,7 @@ describe('/api/sessions/[id]/vote', () => {
 
   it('returns 400 when round is already revealed', async () => {
     const testSession: Session = {
-      id: 'TEST999',
+      id: 'TEST9999',
       topic: 'Test Session',
       participants: [
         {
@@ -189,7 +174,7 @@ describe('/api/sessions/[id]/vote', () => {
     
     sessionStorage.createSession(testSession);
 
-    const request = new NextRequest('http://localhost/api/sessions/TEST999/vote', {
+    const request = new NextRequest('http://localhost/api/sessions/TEST9999/vote', {
       method: 'POST',
       body: JSON.stringify({
         participantId: 'participant-1',
@@ -197,7 +182,7 @@ describe('/api/sessions/[id]/vote', () => {
       })
     });
 
-    const params = Promise.resolve({ id: 'TEST999' });
+    const params = Promise.resolve({ id: 'TEST9999' });
     const response = await POST(request, { params });
     const data = await response.json();
 

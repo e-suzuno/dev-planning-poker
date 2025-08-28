@@ -25,6 +25,9 @@ const customJestConfig = {
       statements: 80,
     },
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(nanoid|@next)/)',
+  ],
 }
 
 module.exports = createJestConfig(customJestConfig)
