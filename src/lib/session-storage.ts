@@ -2,7 +2,14 @@ import { Session, Participant, CardValue, Round } from '@/types/session';
 import { createParticipantId } from '@/lib/session-utils';
 
 class SessionStorage {
-  private sessions: Map<string, Session> = new Map();
+  private sessions: Map<string, Session>;
+
+  constructor() {
+    if (!(global as any).sessionStorageMap) {
+      (global as any).sessionStorageMap = new Map<string, Session>();
+    }
+    this.sessions = (global as any).sessionStorageMap;
+  }
 
   createSession(session: Session): void {
     this.sessions.set(session.id, session);

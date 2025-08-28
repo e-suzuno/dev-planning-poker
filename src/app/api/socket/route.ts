@@ -1,6 +1,5 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { Server as SocketIOServer } from 'socket.io';
-import { Server as HTTPServer } from 'http';
 import { sessionStorage } from '@/lib/session-storage';
 import { createSessionId, createParticipantId } from '@/lib/session-utils';
 import { ClientToServerEvents, ServerToClientEvents } from '@/lib/socket-events';
@@ -13,12 +12,25 @@ let io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
 
 export async function GET(req: NextRequest) {
   if (!io) {
-    const httpServer = new HTTPServer();
-    io = new SocketIOServer(httpServer, {
+    console.log('Initializing Socket.IO server...');
+    
+    if (!(global as any).httpServer) {
+      const { createServer } = await import('http');
+      (global as any).httpServer = createServer();
+      
+      const port = process.env.SOCKET_PORT || 3001;
+      (global as any).httpServer.listen(port, () => {
+        console.log(`Socket.IO server running on port ${port}`);
+      });
+    }
+    
+    io = new SocketIOServer((global as any).httpServer, {
       cors: {
         origin: process.env.NODE_ENV === 'production' ? false : '*',
         methods: ['GET', 'POST']
-      }
+      },
+      transports: ['websocket', 'polling'],
+      path: '/socket.io/'
     });
 
     io.on('connection', (socket) => {
@@ -57,13 +69,16 @@ export async function GET(req: NextRequest) {
       });
 
       socket.on('session:join', ({ sessionId, name }, callback) => {
+        console.log(`Attempting to join session: ${sessionId}`);
+        console.log('Available sessions:', sessionStorage.getAllSessions().map(s => s.id));
         const session = sessionStorage.getSession(sessionId);
         if (!session) {
+          console.log(`Session ${sessionId} not found in Socket.IO storage`);
           callback({ session: null as any, participantId: '' });
           return;
         }
 
-        const participantId = createParticipantId();
+        const participantId = socket.id;
         const participant: Participant = {
           id: participantId,
           name,
@@ -126,6 +141,18 @@ export async function GET(req: NextRequest) {
 
       socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
+        
+        const sessions = sessionStorage.getAllSessions();
+        for (const session of sessions) {
+          const participant = session.participants.find(p => p.id === socket.id);
+          if (participant) {
+            participant.isOnline = false;
+            sessionStorage.updateSession(session.id, session);
+            socket.to(`session:${session.id}`).emit('session:state', { session });
+            socket.to(`session:${session.id}`).emit('participant:left', { participantId: participant.id });
+            break;
+          }
+        }
       });
     });
   }
